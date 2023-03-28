@@ -30,10 +30,10 @@ int main(int, char**)
     ::RegisterClassExW(&wc);
     HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Library System", WS_OVERLAPPED + WS_THICKFRAME + WS_BORDER + WS_SYSMENU, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
 
-    // give window icon C:\Users\Xaine\CLionProjects\NEA\book.ico
+    // set window icon
     auto hIcon = (HICON) LoadImage( // returns a HANDLE so we have to cast to HICON
             nullptr,             // hInstance must be NULL when loading from a file
-            R"(C:\Users\Xaine\CLionProjects\NEA\book.ico)",   // the icon file name
+            R"(assets\book.ico)",   // the icon file name
             IMAGE_ICON,       // specifies that the file is an icon
             0,                // width of the image (we'll specify default later on)
             0,                // height of the image

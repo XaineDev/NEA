@@ -43,9 +43,11 @@ void LibrarySystem::drawLibraryScreen() {
         return;
     }
 
-    // create imgui main menu bar with clickable buttons
+    // if logged in, show the user the proper main menu bar
     if (ImGui::BeginMainMenuBar())
     {
+        ImGui::Text("Logged in as %s", libraryLogin.username);
+        ImGui::SameLine();
         if (ImGui::MenuItem("Main Menu"))
         {
             std::cout << "Main Menu" << std::endl;
