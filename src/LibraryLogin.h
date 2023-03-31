@@ -11,6 +11,7 @@ private:
     bool loggingIn = false;
     bool loginFailed = false;
     long long loginFailedTime = 0;
+    std::string loginFailedMessage;
 
     bool registering = false;
     bool registerFailed = false;
@@ -20,25 +21,35 @@ public:
     bool isLoggedIn() const;
 
     bool isLoggingIn() const;
+
     bool isLoginFailed() const;
+
     void setLoginFailed(bool failed);
+
     long long timeSinceLoginFailed() const;
 
     bool isRegistering() const;
+
     bool isRegisterFailed() const;
+
     void setRegisterFailed(bool failed);
+
     long long timeSinceRegisterFailed() const;
 
     void login();
-    LibraryAccount* getAccount();
+
+    LibraryAccount *getAccount();
 
     std::string token;
-    char username[128] = { 0 };
-    char password[128] = { 0 };
+    char username[128] = {0};
+    char password[128] = {0};
 
     void logOut();
+
     void registerAccount();
 
     nlohmann::json apiResponse;
+
+    std::string getLoginFailedMessage();
 };
 

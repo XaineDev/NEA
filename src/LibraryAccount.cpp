@@ -26,7 +26,8 @@ std::string LibraryAccount::getToken() const {
     return token;
 }
 
-LibraryAccount::LibraryAccount(std::string username, long long int creationDate, std::string token) : username(std::move(username)){
+LibraryAccount::LibraryAccount(std::string username, long long int creationDate, std::string token) : username(
+        std::move(username)) {
     this->creationDate = creationDate;
     this->token = std::move(token);
 }

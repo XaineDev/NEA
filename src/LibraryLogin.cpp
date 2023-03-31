@@ -55,32 +55,39 @@ void LibraryLogin::login() {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         apiResponse = WebRequest::login(username, password);
-        if (apiResponse["success"].get<bool>()) {
+        if (apiResponse.contains("success") && apiResponse["success"].get<bool>()) {
             loggedIn = true;
             loginFailed = false;
         } else {
             loggedIn = false;
             loginFailed = true;
             loginFailedTime = time(nullptr);
+            loginFailedMessage = apiResponse.contains("error") ? apiResponse["error"].get<std::string>() : std::string(
+                    "Couldn't connect to server.");
         }
         loggingIn = false;
     });
     loginThread.detach();
 }
 
-LibraryAccount* LibraryLogin::getAccount() {
+LibraryAccount *LibraryLogin::getAccount() {
     if (isLoggedIn()) {
-        return new LibraryAccount(username, apiResponse["creationDate"].get<long long>(), apiResponse["token"].get<std::string>());
+        return new LibraryAccount(username,
+                                  apiResponse.contains("creationDate") ? apiResponse["creationDate"].get<long long>()
+                                                                       : 0,
+                                  apiResponse.contains("token") ? apiResponse["token"].get<std::string>() : "",
+                                  apiResponse.contains("admin") && apiResponse["admin"].get<bool>());
     }
     return nullptr;
 }
 
 void LibraryLogin::logOut() {
+    username[0] = '\0';
+    password[0] = '\0';
     loggedIn = false;
     loginFailed = false;
     loginFailedTime = 0;
-    memset(username, 0, sizeof(username));
-    memset(password, 0, sizeof(password));
+    loginFailedMessage = "";
 }
 
 void LibraryLogin::registerAccount() {
@@ -104,4 +111,8 @@ void LibraryLogin::registerAccount() {
         registering = false;
     });
     registerThread.detach();
+}
+
+std::string LibraryLogin::getLoginFailedMessage() {
+    return loginFailedMessage;
 }
