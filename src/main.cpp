@@ -6,13 +6,16 @@
 #include "external/imgui_impl_dx9.h"
 #include "external/imgui_impl_win32.h"
 #include "LibrarySystem.h"
+#include "net/WebRequest.h"
+#include "constants.h"
 #include <d3d9.h>
+#include <d3dx9tex.h>
 #include <tchar.h>
 #include <iostream>
 
 // Data
-static LPDIRECT3D9              g_pD3D = nullptr;
 static LPDIRECT3DDEVICE9        g_pd3dDevice = nullptr;
+static LPDIRECT3D9              g_pD3D = nullptr;
 static D3DPRESENT_PARAMETERS    g_d3dpp = {};
 
 // Forward declarations of helper functions
@@ -21,19 +24,31 @@ void CleanupDeviceD3D();
 void ResetDevice();
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+bool LoadTextureFromFile(const char* filename, PDIRECT3DTEXTURE9* out_texture, int* out_width, int* out_height)
+{
+    // Load texture from disk
+    PDIRECT3DTEXTURE9 texture;
+    HRESULT hr = D3DXCreateTextureFromFileA(g_pd3dDevice, filename, &texture);
+    if (hr != S_OK)
+        return false;
+
+    // Retrieve description of the texture surface so we can access its size
+    D3DSURFACE_DESC my_image_desc;
+    texture->GetLevelDesc(0, &my_image_desc);
+
+    *out_texture = texture;
+    *out_width = (int)my_image_desc.Width;
+    *out_height = (int)my_image_desc.Height;
+    return true;
+}
+
 // Main code
 int main(int, char**)
 {
-    // Create application window
-    //ImGui_ImplWin32_EnableDpiAwareness();
-    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
-    ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Library System", WS_OVERLAPPED + WS_THICKFRAME + WS_BORDER + WS_SYSMENU, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
-
-    // set window icon
+    // get icon
     auto hIcon = (HICON) LoadImage( // returns a HANDLE so we have to cast to HICON
             nullptr,             // hInstance must be NULL when loading from a file
-            R"(assets\book.ico)",   // the icon file name
+            R"(..\assets\book.ico)",   // the icon file name
             IMAGE_ICON,       // specifies that the file is an icon
             0,                // width of the image (we'll specify default later on)
             0,                // height of the image
@@ -41,8 +56,13 @@ int main(int, char**)
             LR_DEFAULTSIZE|   // default metrics based on the type (IMAGE_ICON, 32x32)
             LR_SHARED         // let the system release the handle when it's no longer used
     );
-    SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-    SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+
+    // Create application window
+    //ImGui_ImplWin32_EnableDpiAwareness();
+    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), hIcon, nullptr, nullptr, nullptr, L"Library System", hIcon };
+    ::RegisterClassExW(&wc);
+    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Library System", WS_OVERLAPPED + WS_THICKFRAME + WS_BORDER + WS_SYSMENU, 100, 100, 1280, 800, nullptr, nullptr, wc.hInstance, nullptr);
+
 
 
     // Initialize Direct3D
@@ -80,8 +100,8 @@ int main(int, char**)
     // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
     // - Read 'docs/FONTS.md' for more instructions and details.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    io.Fonts->AddFontDefault();
-    io.Fonts->AddFontFromFileTTF("C:\\Users\\Xaine\\Desktop\\SFMonoRegular.otf", 13.0f);
+    //io.Fonts->AddFontDefault();
+    io.Fonts->AddFontFromFileTTF("..\\assets\\SFMonoRegular.otf", 13.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
@@ -94,12 +114,27 @@ int main(int, char**)
     // Our state
     bool show_demo_window = true;
     bool show_another_window = false;
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    ImVec4 clear_color = ImVec4(0.106f, 0.106f, 0.106f, 1.00f);
 
     // Main loop
+    int my_image_width = 0;
+    int my_image_height = 0;
+    PDIRECT3DTEXTURE9 my_texture = NULL;
+    bool ret = LoadTextureFromFile("..\\assets\\default.jpg", &my_texture, &my_image_width, &my_image_height);
+    if (!ret)
+    {
+        std::cout << "Failed to load default profile picture" << std::endl;
+    } else
+    {
+        std::cout << "Loaded default profile picture" << std::endl;
+    }
+
     bool shouldClose = false;
-    auto* librarySystem = new LibrarySystem(hwnd);
-    while (!shouldClose)
+    auto* librarySystem = new LibrarySystem(hwnd, Image(my_texture, my_image_width/5, my_image_height/5));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5);
+
+
+    while (true)
     {
         // Poll and handle messages (inputs, window resize, etc.)
         // See the WndProc() function below for our to dispatch events to the Win32 backend.
