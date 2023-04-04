@@ -10,7 +10,6 @@
 class LibrarySystem {
 private:
     LibraryLogin *libraryLogin;
-    LibraryAccount *account;
     HWND window;
     Image defaultProfileImage = Image(nullptr, 0, 0);
 
@@ -27,6 +26,8 @@ public:
     void drawLibraryScreen();
 
     explicit LibrarySystem(HWND window, Image defaultProfileImage);
+
+    ~LibrarySystem();
 
     void drawSecondaryMenuBar();
 

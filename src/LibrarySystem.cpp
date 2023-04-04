@@ -5,12 +5,16 @@
 #include "LibrarySystem.h"
 #include "external/imgui.h"
 #include "constants.h"
+#include "external/time/date/date.h"
 
 LibrarySystem::LibrarySystem(HWND window, Image defaultProfileImage) {
-    this->account = nullptr;
     this->libraryLogin = new LibraryLogin();
     this->window = window;
     this->defaultProfileImage = defaultProfileImage;
+}
+
+LibrarySystem::~LibrarySystem() {
+    delete libraryLogin;
 }
 
 void LibrarySystem::drawLibraryScreen() {
@@ -37,7 +41,7 @@ void LibrarySystem::drawLibraryScreen() {
                     ImGui::SameLine();
                     ImGui::TextColored(ImVec4(1, 0, 0, 1), libraryLogin->getLoginFailedMessage().c_str());
                 } else if (libraryLogin->isRegisterFailed() && libraryLogin->timeSinceRegisterFailed() < 2) {
-                    std::string registerError = libraryLogin->apiResponse["error"].get<std::string>();
+                    std::string registerError = libraryLogin->getApiResponse()["error"].get<std::string>();
                     ImGui::Text("Registration failed. ");
                     ImGui::TextColored(ImVec4(1, 0, 0, 1), registerError.c_str());
                 } else {
@@ -62,11 +66,7 @@ void LibrarySystem::drawLibraryScreen() {
         return;
     }
 
-    // if logged in, update the account
-    if (account == nullptr) {
-        account = libraryLogin->getAccount();
-        std::cout << "You have account!" << std::endl;
-    }
+    bool loggingOut = false;
 
     // if logged in, show the user the proper main menu bar
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.106f, 0.106f, 0.106f, 1.00f));
@@ -83,7 +83,7 @@ void LibrarySystem::drawLibraryScreen() {
         if (ImGui::MenuItem("Settings")) {
             currentScreen = SETTINGS;
         }
-        if (account->isAdmin()) {
+        if (libraryLogin->getAccount()->isAdmin()) {
             if (ImGui::MenuItem("User Lookup")) {
                 currentScreen = LOOKUP;
             }
@@ -93,12 +93,16 @@ void LibrarySystem::drawLibraryScreen() {
                 ImGui::GetWindowWidth() - ImGui::CalcTextSize("Logout ").x - ImGui::GetStyle().ItemSpacing.x * 2);
 
         if (ImGui::MenuItem("Logout")) {
+            loggingOut = true;
             libraryLogin->logOut();
-            //account = nullptr;
         }
         ImGui::EndMainMenuBar();
     }
     ImGui::PopStyleColor(1);
+
+    if (loggingOut) {
+        return;
+    }
 
     drawSecondaryMenuBar();
 
@@ -115,6 +119,8 @@ void LibrarySystem::drawLibraryScreen() {
             break;
         case SETTINGS:
             drawSettings();
+            break;
+        case LOOKUP:
             break;
     }
 }
@@ -149,15 +155,23 @@ void LibrarySystem::drawSecondaryMenuBar() {
 
 void LibrarySystem::drawMenuScreen() {
     if (ImGui::Begin("Profile")) {
-        ImGui::Image((void *) defaultProfileImage.texture, ImVec2(128, 128));
-        ImGui::SameLine();
+        //ImGui::Image((void *) defaultProfileImage.texture, ImVec2(128, 128));
+        //ImGui::SameLine();
         // loop spacing until text is to the right of the image
-        for (int i = 0; i < 5; i++) {
-            ImGui::Spacing();
-            ImGui::SameLine();
-        }
+        //for (int i = 0; i < 5; i++) {
+        //    ImGui::Spacing();
+        //    ImGui::SameLine();
+        //}
 
-        ImGui::Text("Welcome, %s", account->getUsername().c_str());
+        // convert unix time to datepoint
+
+        std::cout << libraryLogin->getAccount()->getCreationDateString() << std::endl;
+
+        ImGui::Text("Welcome, %s", libraryLogin->getAccount()->getUsername().c_str());
+        ImGui::Text("Account Created: %s", libraryLogin->getAccount()->getCreationDateString().c_str());
+        ImGui::Text("You have %d books checked out", libraryLogin->getAccount()->getAmountOfBooks());
+        ImGui::Text("Account Status: %s", libraryLogin->getAccount()->isAdmin() ? "Admin" : "User");
+
 
         ImGui::End();
     }

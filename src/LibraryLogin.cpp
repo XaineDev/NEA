@@ -3,7 +3,6 @@
 //
 
 #include <thread>
-#include <string.h>
 #include "LibraryLogin.h"
 #include "json.hpp"
 #include "net/WebRequest.h"
@@ -56,6 +55,8 @@ void LibraryLogin::login() {
 
         apiResponse = WebRequest::login(username, password);
         if (apiResponse.contains("success") && apiResponse["success"].get<bool>()) {
+            apiAccount = apiResponse["user"];
+            account = new LibraryAccount(apiAccount);
             loggedIn = true;
             loginFailed = false;
         } else {
@@ -72,11 +73,7 @@ void LibraryLogin::login() {
 
 LibraryAccount *LibraryLogin::getAccount() {
     if (isLoggedIn()) {
-        return new LibraryAccount(username,
-                                  apiResponse.contains("creationDate") ? apiResponse["creationDate"].get<long long>()
-                                                                       : 0,
-                                  apiResponse.contains("token") ? apiResponse["token"].get<std::string>() : "",
-                                  apiResponse.contains("admin") && apiResponse["admin"].get<bool>());
+        return account;
     }
     return nullptr;
 }
@@ -88,6 +85,9 @@ void LibraryLogin::logOut() {
     loginFailed = false;
     loginFailedTime = 0;
     loginFailedMessage = "";
+    delete account;
+    apiResponse = nlohmann::json();
+    apiAccount = nlohmann::json();
 }
 
 void LibraryLogin::registerAccount() {
@@ -115,4 +115,12 @@ void LibraryLogin::registerAccount() {
 
 std::string LibraryLogin::getLoginFailedMessage() {
     return loginFailedMessage;
+}
+
+LibraryLogin::~LibraryLogin() {
+    delete account;
+}
+
+nlohmann::json LibraryLogin::getApiResponse() {
+    return apiResponse;
 }

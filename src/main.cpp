@@ -181,6 +181,8 @@ int main(int, char **) {
             ResetDevice();
     }
 
+    delete librarySystem;
+
     ImGui_ImplDX9_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();

@@ -3,29 +3,43 @@
 //
 
 #include <iostream>
+#include "LibraryBook.h"
 
 class LibraryAccount {
 private:
-    const std::string username;
+    std::string username;
     long long creationDate;
+    std::string creationDateString;
     std::string token;
     bool admin;
+    // might remove this
     // before profile picture is loaded we will use the default profile picture
     // after it is loaded we will cache the profile picture in the users appdata directory
     bool fetchedProfilePicture = false;
+
+    unsigned long long totalBooks = 0;
+    LibraryBook **books;
 public:
-    LibraryAccount(std::string username, long long creationDate, std::string token, bool admin);
+    explicit LibraryAccount(nlohmann::json accountJson);
 
-    std::string getUsername() const;
+    ~LibraryAccount();
 
-    long long getCreationDate() const;
+    [[nodiscard]] std::string getUsername() const;
 
-    bool hasFetchedProfilePicture() const;
+    [[nodiscard]] long long getCreationDate() const;
 
-    std::string getToken() const;
+    [[nodiscard]] bool hasFetchedProfilePicture() const;
+
+    [[nodiscard]] std::string getToken() const;
 
     void setFetchedProfilePicture(bool fetched);
 
-    bool isAdmin() const;
+    [[nodiscard]] bool isAdmin() const;
+
+    LibraryBook **getCheckedOutBooks();
+
+    int getAmountOfBooks() const;
+
+    std::string getCreationDateString();
 };
 

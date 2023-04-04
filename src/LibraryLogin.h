@@ -17,24 +17,31 @@ private:
     bool registerFailed = false;
     long long registerFailedTime = 0;
 
+    nlohmann::json apiResponse;
+    nlohmann::json apiAccount;
+
+    LibraryAccount *account = nullptr;
+
 public:
-    bool isLoggedIn() const;
+    ~LibraryLogin();
 
-    bool isLoggingIn() const;
+    [[nodiscard]] bool isLoggedIn() const;
 
-    bool isLoginFailed() const;
+    [[nodiscard]] bool isLoggingIn() const;
+
+    [[nodiscard]] bool isLoginFailed() const;
 
     void setLoginFailed(bool failed);
 
-    long long timeSinceLoginFailed() const;
+    [[nodiscard]] long long timeSinceLoginFailed() const;
 
-    bool isRegistering() const;
+    [[nodiscard]] bool isRegistering() const;
 
-    bool isRegisterFailed() const;
+    [[nodiscard]] bool isRegisterFailed() const;
 
     void setRegisterFailed(bool failed);
 
-    long long timeSinceRegisterFailed() const;
+    [[nodiscard]] long long timeSinceRegisterFailed() const;
 
     void login();
 
@@ -48,8 +55,8 @@ public:
 
     void registerAccount();
 
-    nlohmann::json apiResponse;
-
     std::string getLoginFailedMessage();
+
+    nlohmann::json getApiResponse();
 };
 

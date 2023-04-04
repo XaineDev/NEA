@@ -20,7 +20,6 @@ nlohmann::json WebRequest::login(const std::string &username, const std::string 
         bodyJson["password"] = password;
         const std::string body = bodyJson.dump();
         std::cout << "sending login request" << std::endl;
-        // send the request in a thread so you can cancel if a response takes too long
         const auto response = request.send("POST", body, {
                 {"Content-Type", "application/json"},
         }, std::chrono::milliseconds{5000});
