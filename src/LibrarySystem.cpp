@@ -4,8 +4,7 @@
 
 #include "LibrarySystem.h"
 #include "external/imgui.h"
-#include "constants.h"
-#include "external/time/date/date.h"
+#include "net/WebRequest.h"
 
 LibrarySystem::LibrarySystem(HWND window, Image defaultProfileImage) {
     this->libraryLogin = new LibraryLogin();
@@ -64,6 +63,12 @@ void LibrarySystem::drawLibraryScreen() {
         }
         ImGui::PopStyleColor(1);
         return;
+    }
+
+    // check if books have been loaded
+    if (!fetchedBooks) {
+        fetchBooks();
+        fetchedBooks = true;
     }
 
     bool loggingOut = false;
@@ -165,12 +170,11 @@ void LibrarySystem::drawMenuScreen() {
 
         // convert unix time to datepoint
 
-        std::cout << libraryLogin->getAccount()->getCreationDateString() << std::endl;
-
         ImGui::Text("Welcome, %s", libraryLogin->getAccount()->getUsername().c_str());
-        ImGui::Text("Account Created: %s", libraryLogin->getAccount()->getCreationDateString().c_str());
         ImGui::Text("You have %d books checked out", libraryLogin->getAccount()->getAmountOfBooks());
+        ImGui::Text("");
         ImGui::Text("Account Status: %s", libraryLogin->getAccount()->isAdmin() ? "Admin" : "User");
+        ImGui::Text("Account Created: %s", libraryLogin->getAccount()->getCreationDateString().c_str());
 
 
         ImGui::End();
@@ -186,5 +190,42 @@ void LibrarySystem::drawSearch() {
 }
 
 void LibrarySystem::drawSettings() {
+
+}
+
+LibraryLogin* LibrarySystem::getLoginSystem() {
+    return libraryLogin;
+}
+
+void LibrarySystem::fetchBooks() {
+    nlohmann::json request;
+    request["user"]["username"] = libraryLogin->getAccount()->getUsername();
+    request["user"]["token"] = libraryLogin->getAccount()->getToken();
+    nlohmann::json books = WebRequest::getBooks(request);
+
+    std::printf("Fetching books... \n");
+
+    if (!books["error"].is_null() && !books["error"].get<std::string>().empty()) {
+        std::printf("Error: %s \n", books["error"].get<std::string>().c_str());
+        return;
+    }
+
+    if (books["books"].is_null() || books["books"].empty()) {
+        std::printf("Error: No books found \n");
+        return;
+    }
+
+    this->libraryBookCount = (int)books["books"].size();
+    this->libraryBooks = new LibraryBook *[libraryBookCount];
+
+    for (int i = 0; i < libraryBookCount; i++) {
+        if (books["books"][i]["currentOwner"].is_null() || books["books"][i]["currentOwner"].get<std::string>().empty()) {
+            libraryBooks[i] = new UnownedLibraryBook(books["books"][i]);
+        } else {
+            libraryBooks[i] = new OwnedLibraryBook(books["books"][i]);
+        }
+    }
+
+    std::printf("Fetched %d book(s)", libraryBookCount);
 
 }

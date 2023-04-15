@@ -3,7 +3,44 @@
 //
 
 #include <iostream>
-#include "LibraryBook.h"
+#include "external/json/json.hpp"
+
+class LibraryBook {
+protected:
+    int id;
+    std::string title;
+    std::string author;
+
+    nlohmann::json bookJson;
+public:
+    explicit LibraryBook(nlohmann::json bookJson);
+
+    [[nodiscard]] int getId() const;
+
+    [[nodiscard]] std::string getTitle() const;
+
+    [[nodiscard]] std::string getAuthor() const;
+
+    virtual nlohmann::json claimBook(const std::string &username, const std::string &token) = 0;
+};
+
+class OwnedLibraryBook : public LibraryBook {
+private:
+    std::string owner;
+public:
+    explicit OwnedLibraryBook(nlohmann::json bookJson);
+
+    [[nodiscard]] std::string getOwner() const;
+
+    nlohmann::json claimBook(const std::string &username, const std::string &token) override;
+};
+
+class UnownedLibraryBook : public LibraryBook {
+public:
+    explicit UnownedLibraryBook(nlohmann::json bookJson);
+
+    nlohmann::json claimBook(const std::string &username, const std::string &token) override;
+};
 
 class LibraryAccount {
 private:
@@ -42,4 +79,3 @@ public:
 
     std::string getCreationDateString();
 };
-

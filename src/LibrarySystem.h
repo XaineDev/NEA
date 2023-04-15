@@ -22,6 +22,12 @@ private:
     };
     DisplayScreen currentScreen = MENU;
 
+    bool fetchingBooks = false;
+    bool fetchedBooks = false;
+    bool failedToFetchBooks = false;
+    int libraryBookCount = 0;
+    LibraryBook **libraryBooks;
+
 public:
     void drawLibraryScreen();
 
@@ -38,4 +44,8 @@ public:
     void drawSearch();
 
     void drawSettings();
+
+    void fetchBooks();
+
+    LibraryLogin* getLoginSystem();
 };

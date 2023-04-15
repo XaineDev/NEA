@@ -7,7 +7,6 @@
 #include "external/imgui_impl_win32.h"
 #include "LibrarySystem.h"
 #include "net/WebRequest.h"
-#include "constants.h"
 #include <d3d9.h>
 #include <d3dx9tex.h>
 #include <tchar.h>
@@ -17,6 +16,7 @@
 static LPDIRECT3DDEVICE9 g_pd3dDevice = nullptr;
 static LPDIRECT3D9 g_pD3D = nullptr;
 static D3DPRESENT_PARAMETERS g_d3dpp = {};
+static LibrarySystem *librarySystem;
 
 // Forward declarations of helper functions
 bool CreateDeviceD3D(HWND hWnd);
@@ -132,9 +132,11 @@ int main(int, char **) {
     }
 
     bool shouldClose = false;
-    auto *librarySystem = new LibrarySystem(hwnd, Image(my_texture, my_image_width / 5, my_image_height / 5));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5);
+    bool showingConsole = false;
+    bool toggledConsole = false;
+    librarySystem = new LibrarySystem(hwnd, Image(my_texture, my_image_width / 5, my_image_height / 5));
 
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5);
 
     while (true) {
         // Poll and handle messages (inputs, window resize, etc.)
@@ -158,6 +160,21 @@ int main(int, char **) {
         ImGui::NewFrame();
 
         librarySystem->drawLibraryScreen();
+
+        // check if control shift o is pressed and toggle showingConsole
+        if (io.KeyCtrl && io.KeyShift && io.KeysDown[79]) {
+            if (!toggledConsole) {
+                showingConsole = !showingConsole;
+                toggledConsole = true;
+            }
+        } else {
+            toggledConsole = false;
+        }
+
+        if (showingConsole) {
+            ImGui::ShowDemoWindow(&showingConsole);
+        }
+
 
         // Rendering
         ImGui::EndFrame();
@@ -264,4 +281,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
+}
+
+static LibrarySystem* getLibrarySystem() {
+    return librarySystem;
 }

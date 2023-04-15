@@ -4,11 +4,11 @@
 
 #include "LibraryAccount.h"
 #include "external/time/date/date.h"
+#include "net/WebRequest.h"
 
 #include <utility>
 
 std::string LibraryAccount::getUsername() const {
-    std::cout << "getting username" << std::endl;
     return username;
 }
 
@@ -33,9 +33,6 @@ bool LibraryAccount::isAdmin() const {
 }
 
 LibraryAccount::LibraryAccount(nlohmann::json accountJson) {
-    // print out formatted account json
-    std::cout << accountJson.dump(4) << std::endl;
-
     // check to make sure the account json is valid
     this->username = accountJson["username"].get<std::string>();
     this->creationDate = accountJson["created_at"].get<long long>();
@@ -46,7 +43,6 @@ LibraryAccount::LibraryAccount(nlohmann::json accountJson) {
     auto creation = date::year_month_day{
             date::floor<date::days>(std::chrono::system_clock::from_time_t(this->creationDate))};
     this->creationDateString = std::string(date::format("%d/%m/%Y", creation));
-    std::cout << "creation date string: " << this->creationDateString << std::endl;
 
     if (accountJson["currentBooks"].is_null()) {
         this->totalBooks = 0;
@@ -56,7 +52,11 @@ LibraryAccount::LibraryAccount(nlohmann::json accountJson) {
     totalBooks = accountJson["currentBooks"].size();
     this->books = new LibraryBook *[totalBooks];
     for (int i = 0; i < totalBooks; i++) {
-        this->books[i] = new LibraryBook(accountJson["currentBooks"][i]);
+        if (accountJson["currentBooks"][i]["currentOwner"].is_null() || accountJson["currentBooks"][i]["currentOwner"].get<std::string>().empty()) {
+            this->books[i] = new UnownedLibraryBook(accountJson["currentBooks"][i]);
+        } else {
+            this->books[i] = new OwnedLibraryBook(accountJson["currentBooks"][i]);
+        }
     }
 }
 
@@ -78,6 +78,54 @@ LibraryBook **LibraryAccount::getCheckedOutBooks() {
 }
 
 std::string LibraryAccount::getCreationDateString() {
-    std::cout << "getting creation date string" << std::endl;
     return this->creationDateString;
+}
+
+LibraryBook::LibraryBook(nlohmann::json bookJson) {
+    this->id = bookJson["id"].get<int>();
+    this->title = bookJson["title"].get<std::string>();
+    this->author = bookJson["author"].get<std::string>();
+}
+
+int LibraryBook::getId() const {
+    return this->id;
+}
+
+std::string LibraryBook::getTitle() const {
+    return this->title;
+}
+
+std::string LibraryBook::getAuthor() const {
+    return this->author;
+}
+
+
+OwnedLibraryBook::OwnedLibraryBook(nlohmann::json bookJson) : LibraryBook(bookJson) {
+    this->owner = bookJson["currentOwner"].get<std::string>();
+}
+
+std::string OwnedLibraryBook::getOwner() const {
+    return this->owner;
+}
+
+nlohmann::json OwnedLibraryBook::claimBook(const std::string &username, const std::string &token) {
+    nlohmann::json json;
+    json["success"] = false;
+    json["message"] = "This book is already owned.";
+    return json;
+}
+
+UnownedLibraryBook::UnownedLibraryBook(nlohmann::json bookJson) : LibraryBook(std::move(bookJson)) {
+
+}
+
+nlohmann::json UnownedLibraryBook::claimBook(const std::string &username, const std::string &token) {
+    nlohmann::json requestJson;
+    requestJson["book_id"] = this->getId();
+    requestJson["book_title"] = this->getTitle(); // used to check if the id is correct for the book
+
+    requestJson["user"]["username"] = username;
+    requestJson["user"]["token"] = token;
+
+    return WebRequest::claimBook(requestJson);
 }

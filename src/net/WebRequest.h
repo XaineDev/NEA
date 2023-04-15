@@ -4,13 +4,20 @@
 
 
 #include <string>
-#include "../json.hpp"
+#include "../external/json/json.hpp"
 
 class WebRequest {
 private:
     static const std::string apiurl;
+
+    static nlohmann::json request(const std::string &endpoint, const std::string &method, const nlohmann::json &body);
+
 public:
     static nlohmann::json login(const std::string &username, const std::string &password);
 
     static nlohmann::json registerAccount(const std::string &username, const std::string &password);
+
+    static nlohmann::json claimBook(const nlohmann::json& requestJson);
+
+    static nlohmann::json getBooks(const nlohmann::json& requestJson);
 };

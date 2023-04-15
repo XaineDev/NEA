@@ -4,7 +4,7 @@
 
 #include <thread>
 #include "LibraryLogin.h"
-#include "json.hpp"
+#include "external/json/json.hpp"
 #include "net/WebRequest.h"
 
 bool LibraryLogin::isLoggedIn() const {
@@ -101,7 +101,6 @@ void LibraryLogin::registerAccount() {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         apiResponse = WebRequest::registerAccount(username, password);
-        std::cout << apiResponse.dump() << std::endl;
         if (apiResponse["success"].get<bool>()) {
             registerFailed = false;
         } else {

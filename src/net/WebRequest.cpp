@@ -3,45 +3,41 @@
 //
 
 #include "WebRequest.h"
-#include "HTTPRequest.hpp"
-#include "../json.hpp"
+#include "../external/http/HTTPRequest.hpp"
+#include "../external/json/json.hpp"
 
 #include <iostream>
 
 const std::string WebRequest::apiurl = "http://localhost:3000/api";
 
 nlohmann::json WebRequest::login(const std::string &username, const std::string &password) {
-    std::cout << "Logging in with username: " << username << " and password: " << password << std::endl;
+    nlohmann::json bodyJson;
+    bodyJson["username"] = username;
+    bodyJson["password"] = password;
 
-    try {
-        http::Request request{apiurl + "/login"};
-        nlohmann::json bodyJson;
-        bodyJson["username"] = username;
-        bodyJson["password"] = password;
-        const std::string body = bodyJson.dump();
-        std::cout << "sending login request" << std::endl;
-        const auto response = request.send("POST", body, {
-                {"Content-Type", "application/json"},
-        }, std::chrono::milliseconds{5000});
-        nlohmann::json responseJson = nlohmann::json::parse(std::string{response.body.begin(), response.body.end()});
-        return responseJson;
-    }
-    catch (const std::exception &e) {
-        std::cerr << "Request failed, error: " << e.what() << '\n';
-    }
-    return {};
+    return request("login", "POST", bodyJson);
 }
 
 nlohmann::json WebRequest::registerAccount(const std::string &username, const std::string &password) {
-    std::cout << "Registering with username: " << username << " and password: " << password << std::endl;
+    nlohmann::json bodyJson;
+    bodyJson["username"] = username;
+    bodyJson["password"] = password;
 
+    return request("register", "POST", bodyJson);
+}
+
+nlohmann::json WebRequest::claimBook(const nlohmann::json& requestJson) {
+    return request("claim", "POST", requestJson);
+}
+
+nlohmann::json WebRequest::getBooks(const nlohmann::json& requestJson) {
+    return request("getBooks", "POST", requestJson);
+}
+
+nlohmann::json WebRequest::request(const std::string &endpoint, const std::string &method, const nlohmann::json &body) {
     try {
-        http::Request request{apiurl + "/register"};
-        nlohmann::json bodyJson;
-        bodyJson["username"] = username;
-        bodyJson["password"] = password;
-        const std::string body = bodyJson.dump();
-        const auto response = request.send("POST", body, {
+        http::Request request{apiurl + "/" + endpoint};
+        const auto response = request.send(method, body.dump(), {
                 {"Content-Type", "application/json"}
         });
         nlohmann::json responseJson = nlohmann::json::parse(std::string{response.body.begin(), response.body.end()});
@@ -50,7 +46,4 @@ nlohmann::json WebRequest::registerAccount(const std::string &username, const st
     catch (const std::exception &e) {
         std::cerr << "Request failed, error: " << e.what() << '\n';
     }
-    nlohmann::json failedJson;
-    failedJson["success"] = false;
-    return failedJson;
 }
