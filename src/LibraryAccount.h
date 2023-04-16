@@ -21,16 +21,20 @@ public:
 
     [[nodiscard]] std::string getAuthor() const;
 
+    bool hasOwner(int owner) const;
+    int getOwner() const;
+
     virtual nlohmann::json claimBook(const std::string &username, const std::string &token) = 0;
 };
 
 class OwnedLibraryBook : public LibraryBook {
 private:
-    std::string owner;
+    int owner;
 public:
     explicit OwnedLibraryBook(nlohmann::json bookJson);
+    ~OwnedLibraryBook();
 
-    [[nodiscard]] std::string getOwner() const;
+    [[nodiscard]] int getOwner() const;
 
     nlohmann::json claimBook(const std::string &username, const std::string &token) override;
 };
@@ -38,12 +42,14 @@ public:
 class UnownedLibraryBook : public LibraryBook {
 public:
     explicit UnownedLibraryBook(nlohmann::json bookJson);
+    ~UnownedLibraryBook();
 
     nlohmann::json claimBook(const std::string &username, const std::string &token) override;
 };
 
 class LibraryAccount {
 private:
+    int id;
     std::string username;
     long long creationDate;
     std::string creationDateString;
@@ -63,6 +69,8 @@ public:
 
     [[nodiscard]] std::string getUsername() const;
 
+    [[nodiscard]] int getId() const;
+
     [[nodiscard]] long long getCreationDate() const;
 
     [[nodiscard]] bool hasFetchedProfilePicture() const;
@@ -78,4 +86,11 @@ public:
     int getAmountOfBooks() const;
 
     std::string getCreationDateString();
+
+    LibraryBook *getBook(int i);
+
+    void removeBook(LibraryBook *pBook);
+
+    void updateBooks(LibraryBook **pBook, int i);
+
 };

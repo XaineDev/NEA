@@ -20,4 +20,6 @@ public:
     static nlohmann::json claimBook(const nlohmann::json& requestJson);
 
     static nlohmann::json getBooks(const nlohmann::json& requestJson);
+
+    static nlohmann::json returnBook(const nlohmann::json& json);
 };

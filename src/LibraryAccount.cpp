@@ -38,13 +38,14 @@ LibraryAccount::LibraryAccount(nlohmann::json accountJson) {
     this->creationDate = accountJson["created_at"].get<long long>();
     this->token = accountJson["token"].get<std::string>();
     this->admin = accountJson["isAdmin"].get<bool>();
+    this->id = accountJson["id"].get<int>();
 
     // convert creation date to a string
     auto creation = date::year_month_day{
             date::floor<date::days>(std::chrono::system_clock::from_time_t(this->creationDate))};
     this->creationDateString = std::string(date::format("%d/%m/%Y", creation));
 
-    if (accountJson["currentBooks"].is_null()) {
+    if (accountJson["currentBooks"].is_null() || accountJson["currentBooks"].empty()) {
         this->totalBooks = 0;
         return;
     }
@@ -52,7 +53,7 @@ LibraryAccount::LibraryAccount(nlohmann::json accountJson) {
     totalBooks = accountJson["currentBooks"].size();
     this->books = new LibraryBook *[totalBooks];
     for (int i = 0; i < totalBooks; i++) {
-        if (accountJson["currentBooks"][i]["currentOwner"].is_null() || accountJson["currentBooks"][i]["currentOwner"].get<std::string>().empty()) {
+        if (accountJson["currentBooks"][i]["currentOwner"].is_null() || accountJson["currentBooks"][i]["currentOwner"].get<int>() == 0) {
             this->books[i] = new UnownedLibraryBook(accountJson["currentBooks"][i]);
         } else {
             this->books[i] = new OwnedLibraryBook(accountJson["currentBooks"][i]);
@@ -81,13 +82,61 @@ std::string LibraryAccount::getCreationDateString() {
     return this->creationDateString;
 }
 
+LibraryBook *LibraryAccount::getBook(int i) {
+    return this->books[i];
+}
+
+void LibraryAccount::removeBook(LibraryBook *pBook) {
+    for (int i = 0; i < this->totalBooks; i++) {
+        if (this->books[i] == pBook) {
+            delete this->books[i];
+            this->books[i] = nullptr;
+            this->totalBooks--;
+            return;
+        }
+    }
+}
+
+void LibraryAccount::updateBooks(LibraryBook **pBook, int bookCount) {
+    // clear books on account
+    for (int i = 0; i < this->totalBooks; i++) {
+        delete this->books[i];
+    }
+
+    // filter out all books that are not owned by the user
+    int newBookAmount = 0;
+    auto newBooks = new LibraryBook*[bookCount];
+    for (int i = 0; i < bookCount; i++) {
+        int bookOwner = pBook[i]->getOwner();
+        std::printf("%d book owner: %d  [is you? %s]\n", i, bookOwner, bookOwner == this->id ? "true" : "false");
+        if (bookOwner == this->id) {
+            newBooks[newBookAmount] = pBook[i];
+            newBookAmount++;
+        }
+    }
+
+    std::printf("New book amount: %d\n", newBookAmount);
+
+    // update books
+    delete[] this->books;
+    this->books = new LibraryBook*[newBookAmount];
+    for (int i = 0; i < newBookAmount; i++) {
+        this->books[i] = newBooks[i];
+    }
+    this->totalBooks = newBookAmount;
+
+    // free memory used
+    delete[] newBooks;
+}
+
 LibraryBook::LibraryBook(nlohmann::json bookJson) {
     this->id = bookJson["id"].get<int>();
     this->title = bookJson["title"].get<std::string>();
     this->author = bookJson["author"].get<std::string>();
+    this->bookJson = bookJson;
 }
 
-int LibraryBook::getId() const {
+int LibraryAccount::getId() const {
     return this->id;
 }
 
@@ -99,12 +148,35 @@ std::string LibraryBook::getAuthor() const {
     return this->author;
 }
 
-
-OwnedLibraryBook::OwnedLibraryBook(nlohmann::json bookJson) : LibraryBook(bookJson) {
-    this->owner = bookJson["currentOwner"].get<std::string>();
+bool LibraryBook::hasOwner(int id) const {
+    if (!this->bookJson.contains("currentOwner")) {
+        return false;
+    }
+    if (this->bookJson["currentOwner"].is_null()) {
+        return false;
+    }
+    return this->bookJson["currentOwner"].get<int>() == id;
 }
 
-std::string OwnedLibraryBook::getOwner() const {
+int LibraryBook::getOwner() const {
+    std::cout << this->bookJson.dump() << std::endl;
+    if (this->bookJson.contains("currentOwner")) {
+        return this->bookJson["currentOwner"].get<int>();
+    }
+    return 0;
+}
+
+int LibraryBook::getId() const {
+    return this->id;
+}
+
+OwnedLibraryBook::OwnedLibraryBook(nlohmann::json bookJson) : LibraryBook(bookJson) {
+    this->owner = bookJson["currentOwner"].get<int>();
+}
+
+OwnedLibraryBook::~OwnedLibraryBook() = default;
+
+int OwnedLibraryBook::getOwner() const {
     return this->owner;
 }
 
@@ -115,9 +187,11 @@ nlohmann::json OwnedLibraryBook::claimBook(const std::string &username, const st
     return json;
 }
 
-UnownedLibraryBook::UnownedLibraryBook(nlohmann::json bookJson) : LibraryBook(std::move(bookJson)) {
+UnownedLibraryBook::UnownedLibraryBook(nlohmann::json bookJson) : LibraryBook(bookJson) {
 
 }
+
+UnownedLibraryBook::~UnownedLibraryBook() = default;
 
 nlohmann::json UnownedLibraryBook::claimBook(const std::string &username, const std::string &token) {
     nlohmann::json requestJson;

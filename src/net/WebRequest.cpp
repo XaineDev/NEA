@@ -39,11 +39,17 @@ nlohmann::json WebRequest::request(const std::string &endpoint, const std::strin
         http::Request request{apiurl + "/" + endpoint};
         const auto response = request.send(method, body.dump(), {
                 {"Content-Type", "application/json"}
-        });
+        }, (std::chrono::milliseconds) 5000);
         nlohmann::json responseJson = nlohmann::json::parse(std::string{response.body.begin(), response.body.end()});
         return responseJson;
     }
     catch (const std::exception &e) {
         std::cerr << "Request failed, error: " << e.what() << '\n';
     }
+
+    return {};
+}
+
+nlohmann::json WebRequest::returnBook(const nlohmann::json& json) {
+    return request("unclaimBook", "POST", json);
 }

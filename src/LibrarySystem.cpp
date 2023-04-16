@@ -70,10 +70,26 @@ void LibrarySystem::drawLibraryScreen() {
         fetchBooks();
         fetchedBooks = true;
     }
-
     bool loggingOut = false;
 
-    // if logged in, show the user the proper main menu bar
+
+    switch (currentScreen) {
+        case MENU:
+            drawMenuScreen();
+            break;
+        case LIBRARY:
+            drawLibrary();
+            break;
+        case SEARCH:
+            drawSearch();
+            break;
+        case SETTINGS:
+            drawSettings();
+            break;
+        case LOOKUP:
+            break;
+    }
+
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.106f, 0.106f, 0.106f, 1.00f));
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::MenuItem("Main Menu")) {
@@ -99,6 +115,7 @@ void LibrarySystem::drawLibraryScreen() {
 
         if (ImGui::MenuItem("Logout")) {
             loggingOut = true;
+            fetchedBooks = false;
             libraryLogin->logOut();
         }
         ImGui::EndMainMenuBar();
@@ -111,23 +128,6 @@ void LibrarySystem::drawLibraryScreen() {
 
     drawSecondaryMenuBar();
 
-
-    switch (currentScreen) {
-        case MENU:
-            drawMenuScreen();
-            break;
-        case LIBRARY:
-            drawLibrary();
-            break;
-        case SEARCH:
-            drawSearch();
-            break;
-        case SETTINGS:
-            drawSettings();
-            break;
-        case LOOKUP:
-            break;
-    }
 }
 
 void LibrarySystem::drawSecondaryMenuBar() {
@@ -182,7 +182,49 @@ void LibrarySystem::drawMenuScreen() {
 }
 
 void LibrarySystem::drawLibrary() {
+    // next window size to fullscreen
+    float topMargin = 20;
+    ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y - topMargin*2));
+    ImGui::SetNextWindowPos(ImVec2(0, topMargin));
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoResize |
+                                    ImGuiWindowFlags_NoMove |
+                                    ImGuiWindowFlags_NoCollapse;
 
+    if (ImGui::Begin("My Books"), nullptr, window_flags) {
+        for (int i = 0; i < libraryLogin->getAccount()->getAmountOfBooks(); i++) {
+            LibraryBook* book = libraryLogin->getAccount()->getBook(i);
+            std::string bookTitle = book->getTitle() + " " + std::to_string(i);
+
+            ImGui::BeginChild(bookTitle.c_str(), ImVec2(480, 60), true);
+            ImGui::Text("Title: %s", book->getTitle().c_str());
+            ImGui::Text("Author: %s", book->getAuthor().c_str());
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::BeginChild((bookTitle + " Buttons").c_str(), ImVec2(65, 60), true);
+            if (ImGui::Button("Return")) {
+                nlohmann::json request;
+
+                request["user"]["username"] = libraryLogin->getAccount()->getUsername();
+                request["user"]["token"] = libraryLogin->getAccount()->getToken();
+                request["book_id"] = book->getId();
+                request["book_title"] = book->getTitle();
+
+                nlohmann::json response = WebRequest::returnBook(request);
+                if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) || response.empty()) {
+                    std::printf("Error returning book: %s \n", response["error"].get<std::string>().c_str());
+                } else {
+                    if (!response["success"].is_null() && response["success"].get<bool>()) {
+                        std::printf("Successfully returned book \n");
+                        libraryLogin->getAccount()->removeBook(book);
+                        fetchedBooks = false;
+                    }
+                }
+            }
+            ImGui::EndChild();
+        }
+
+        ImGui::End();
+    }
 }
 
 void LibrarySystem::drawSearch() {
@@ -219,13 +261,14 @@ void LibrarySystem::fetchBooks() {
     this->libraryBooks = new LibraryBook *[libraryBookCount];
 
     for (int i = 0; i < libraryBookCount; i++) {
-        if (books["books"][i]["currentOwner"].is_null() || books["books"][i]["currentOwner"].get<std::string>().empty()) {
+        if (books["books"][i]["currentOwner"].is_null() || books["books"][i]["currentOwner"].get<int>() == 0) {
             libraryBooks[i] = new UnownedLibraryBook(books["books"][i]);
         } else {
             libraryBooks[i] = new OwnedLibraryBook(books["books"][i]);
         }
     }
+    this->getLoginSystem()->getAccount()->updateBooks(this->libraryBooks, this->libraryBookCount);
 
-    std::printf("Fetched %d book(s)", libraryBookCount);
+    std::printf("Fetched %d book(s)\n", libraryBookCount);
 
 }
