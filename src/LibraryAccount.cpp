@@ -108,14 +108,18 @@ void LibraryAccount::updateBooks(LibraryBook **pBook, int bookCount) {
     auto newBooks = new LibraryBook*[bookCount];
     for (int i = 0; i < bookCount; i++) {
         int bookOwner = pBook[i]->getOwner();
-        std::printf("%d book owner: %d  [is you? %s]\n", i, bookOwner, bookOwner == this->id ? "true" : "false");
         if (bookOwner == this->id) {
             newBooks[newBookAmount] = pBook[i];
             newBookAmount++;
         }
     }
 
-    std::printf("New book amount: %d\n", newBookAmount);
+    if (newBookAmount == 0) {
+        this->books = new LibraryBook*[1];
+        this->totalBooks = 0;
+        delete[] newBooks;
+        return;
+    }
 
     // update books
     delete[] this->books;

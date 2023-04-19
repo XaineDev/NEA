@@ -13,6 +13,8 @@ private:
     long long loginFailedTime = 0;
     std::string loginFailedMessage;
 
+    bool logoutQueued = false;
+
     bool registering = false;
     bool registerFailed = false;
     long long registerFailedTime = 0;
@@ -52,6 +54,8 @@ public:
     char password[128] = {0};
 
     void logOut();
+    void queueLogout();
+    bool isLogoutQueued();
 
     void registerAccount();
 

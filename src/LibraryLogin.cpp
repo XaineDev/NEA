@@ -88,6 +88,7 @@ void LibraryLogin::logOut() {
     delete account;
     apiResponse = nlohmann::json();
     apiAccount = nlohmann::json();
+    logoutQueued = false;
 }
 
 void LibraryLogin::registerAccount() {
@@ -122,4 +123,12 @@ LibraryLogin::~LibraryLogin() {
 
 nlohmann::json LibraryLogin::getApiResponse() {
     return apiResponse;
+}
+
+void LibraryLogin::queueLogout() {
+    this->logoutQueued = true;
+}
+
+bool LibraryLogin::isLogoutQueued() {
+    return this->logoutQueued;
 }

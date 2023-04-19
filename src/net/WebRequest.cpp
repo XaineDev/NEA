@@ -27,7 +27,7 @@ nlohmann::json WebRequest::registerAccount(const std::string &username, const st
 }
 
 nlohmann::json WebRequest::claimBook(const nlohmann::json& requestJson) {
-    return request("claim", "POST", requestJson);
+    return request("claimBook", "POST", requestJson);
 }
 
 nlohmann::json WebRequest::getBooks(const nlohmann::json& requestJson) {
@@ -52,4 +52,16 @@ nlohmann::json WebRequest::request(const std::string &endpoint, const std::strin
 
 nlohmann::json WebRequest::returnBook(const nlohmann::json& json) {
     return request("unclaimBook", "POST", json);
+}
+
+nlohmann::json WebRequest::forceCheckout(const nlohmann::json& json) {
+    return request("admin/forceUnclaim", "POST", json);
+}
+
+nlohmann::json WebRequest::fetchLogs(const nlohmann::json& json) {
+    return request("admin/fetchLogs", "POST", json);
+}
+
+nlohmann::json WebRequest::fetchUsers(const nlohmann::json& json) {
+    return request("admin/fetchUsers", "POST", json);
 }

@@ -22,4 +22,10 @@ public:
     static nlohmann::json getBooks(const nlohmann::json& requestJson);
 
     static nlohmann::json returnBook(const nlohmann::json& json);
+
+    static nlohmann::json fetchLogs(const nlohmann::json& json);
+
+    static nlohmann::json forceCheckout(const nlohmann::json& json);
+
+    static nlohmann::json fetchUsers(const nlohmann::json& json);
 };

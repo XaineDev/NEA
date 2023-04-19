@@ -5,6 +5,9 @@
 #include "LibrarySystem.h"
 #include "external/imgui.h"
 #include "net/WebRequest.h"
+#include "external/imgui_internal.h"
+#include "search.h"
+#include "external/time/date/date.h"
 
 LibrarySystem::LibrarySystem(HWND window, Image defaultProfileImage) {
     this->libraryLogin = new LibraryLogin();
@@ -65,13 +68,24 @@ void LibrarySystem::drawLibraryScreen() {
         return;
     }
 
+    if (libraryLogin->isLogoutQueued()) {
+        libraryLogin->logOut();
+        currentScreen = MENU;
+
+        // cleanup books for next user
+        fetchedBooks = false;
+        cachedSearchBooks.clear();
+        hasCachedSearch = false;
+        searchBarText[0] = '\0';
+        currentSearch = "";
+        return;
+    }
+
     // check if books have been loaded
     if (!fetchedBooks) {
         fetchBooks();
         fetchedBooks = true;
     }
-    bool loggingOut = false;
-
 
     switch (currentScreen) {
         case MENU:
@@ -86,7 +100,13 @@ void LibrarySystem::drawLibraryScreen() {
         case SETTINGS:
             drawSettings();
             break;
-        case LOOKUP:
+        case ADMIN_PANEL:
+            // check if user is admin, if not change screen back to menu
+            if (!libraryLogin->getAccount()->isAdmin()) {
+                currentScreen = MENU;
+                drawMenuScreen();
+            }
+            drawAdminPanel();
             break;
     }
 
@@ -96,17 +116,19 @@ void LibrarySystem::drawLibraryScreen() {
             currentScreen = MENU;
         }
         if (ImGui::MenuItem("My Books")) {
+            fetchedBooks = false;
             currentScreen = LIBRARY;
         }
         if (ImGui::MenuItem("Search")) {
+            fetchedBooks = false;
             currentScreen = SEARCH;
         }
         if (ImGui::MenuItem("Settings")) {
             currentScreen = SETTINGS;
         }
         if (libraryLogin->getAccount()->isAdmin()) {
-            if (ImGui::MenuItem("User Lookup")) {
-                currentScreen = LOOKUP;
+            if (ImGui::MenuItem("Admin Panel")) {
+                currentScreen = ADMIN_PANEL;
             }
         }
 
@@ -114,17 +136,12 @@ void LibrarySystem::drawLibraryScreen() {
                 ImGui::GetWindowWidth() - ImGui::CalcTextSize("Logout ").x - ImGui::GetStyle().ItemSpacing.x * 2);
 
         if (ImGui::MenuItem("Logout")) {
-            loggingOut = true;
             fetchedBooks = false;
-            libraryLogin->logOut();
+            libraryLogin->queueLogout();
         }
         ImGui::EndMainMenuBar();
     }
     ImGui::PopStyleColor(1);
-
-    if (loggingOut) {
-        return;
-    }
 
     drawSecondaryMenuBar();
 
@@ -182,45 +199,53 @@ void LibrarySystem::drawMenuScreen() {
 }
 
 void LibrarySystem::drawLibrary() {
-    // next window size to fullscreen
     float topMargin = 20;
-    ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y - topMargin*2));
-    ImGui::SetNextWindowPos(ImVec2(0, topMargin));
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoResize |
-                                    ImGuiWindowFlags_NoMove |
-                                    ImGuiWindowFlags_NoCollapse;
 
-    if (ImGui::Begin("My Books"), nullptr, window_flags) {
+    int window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+
+    if (ImGui::Begin("books", nullptr, window_flags)) {
+
+        // fullscreen window
+        ImGui::SetWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y - topMargin*2));
+        ImGui::SetWindowPos(ImVec2(0, topMargin));
+
         for (int i = 0; i < libraryLogin->getAccount()->getAmountOfBooks(); i++) {
             LibraryBook* book = libraryLogin->getAccount()->getBook(i);
             std::string bookTitle = book->getTitle() + " " + std::to_string(i);
 
-            ImGui::BeginChild(bookTitle.c_str(), ImVec2(480, 60), true);
-            ImGui::Text("Title: %s", book->getTitle().c_str());
-            ImGui::Text("Author: %s", book->getAuthor().c_str());
-            ImGui::EndChild();
+            if (ImGui::BeginChild(bookTitle.c_str(), ImVec2(480, 60), true)) {
+                ImGui::Text("Title: %s", book->getTitle().c_str());
+                ImGui::Text("Author: %s", book->getAuthor().c_str());
+                ImGui::EndChild();
+            }
             ImGui::SameLine();
-            ImGui::BeginChild((bookTitle + " Buttons").c_str(), ImVec2(65, 60), true);
-            if (ImGui::Button("Return")) {
-                nlohmann::json request;
 
-                request["user"]["username"] = libraryLogin->getAccount()->getUsername();
-                request["user"]["token"] = libraryLogin->getAccount()->getToken();
-                request["book_id"] = book->getId();
-                request["book_title"] = book->getTitle();
+            if (ImGui::BeginChild((bookTitle + " Buttons").c_str(), ImVec2(65, 60), true)) {
+                if (ImGui::Button("Return")) {
+                    nlohmann::json request;
 
-                nlohmann::json response = WebRequest::returnBook(request);
-                if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) || response.empty()) {
-                    std::printf("Error returning book: %s \n", response["error"].get<std::string>().c_str());
-                } else {
-                    if (!response["success"].is_null() && response["success"].get<bool>()) {
-                        std::printf("Successfully returned book \n");
-                        libraryLogin->getAccount()->removeBook(book);
-                        fetchedBooks = false;
+                    request["user"]["username"] = libraryLogin->getAccount()->getUsername();
+                    request["user"]["token"] = libraryLogin->getAccount()->getToken();
+                    request["book_id"] = book->getId();
+                    request["book_title"] = book->getTitle();
+
+                    nlohmann::json response = WebRequest::returnBook(request);
+                    if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) || response.empty()) {
+                        std::printf("Error returning book: %s \n", response["error"].get<std::string>().c_str());
+                        if (response["error"].get<std::string>() == "invalid token") {
+                            fetchedBooks = false;
+                            libraryLogin->queueLogout();
+                        }
+                    } else {
+                        if (!response["success"].is_null() && response["success"].get<bool>()) {
+                            std::printf("Successfully returned book \n");
+                            libraryLogin->getAccount()->removeBook(book);
+                            fetchedBooks = false;
+                        }
                     }
                 }
+                ImGui::EndChild();
             }
-            ImGui::EndChild();
         }
 
         ImGui::End();
@@ -228,11 +253,431 @@ void LibrarySystem::drawLibrary() {
 }
 
 void LibrarySystem::drawSearch() {
+    float topMargin = 20;
+    int window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+    if (ImGui::Begin("SearchBar", nullptr, window_flags)) {
+        ImGui::SetWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y - topMargin*2));
+        ImGui::SetWindowPos(ImVec2(0, topMargin));
 
+        ImGui::InputText("##SearchBar", this->searchBarText, 128);
+        ImGui::SameLine();
+        if (ImGui::Button("Search")) {
+            cachedSearchBooks.clear();
+            hasCachedSearch = false;
+            currentSearch = searchBarText;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) {
+            cachedSearchBooks.clear();
+            hasCachedSearch = false;
+            currentSearch = "";
+            this->searchBarText[0] = '\0';
+        }
+
+        bool updatingBooks = false;
+
+        // create search results box which fills up rest of screen
+        if (ImGui::BeginChild("SearchResults", ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y - topMargin*3), false)) {
+            if (currentSearch.empty()) {
+                for (int id = 0; id < this->libraryBookCount; id++) {
+                    LibraryBook* book = libraryBooks[id];
+                    std::string bookTitle = book->getTitle() + " " + std::to_string(id);
+
+                    ImGui::BeginChild(bookTitle.c_str(), ImVec2(480, 60), true);
+                    ImGui::Text("Title: %s", book->getTitle().c_str());
+                    ImGui::Text("Author: %s", book->getAuthor().c_str());
+                    ImGui::EndChild();
+                    ImGui::SameLine();
+                    ImGui::BeginChild((bookTitle + " Buttons").c_str(), ImVec2(150, 60), true);
+                    if (book->hasOwner(this->getLoginSystem()->getAccount()->getId())) {
+                        // show return button as you already own the book
+                        if (ImGui::Button("Return")) {
+                            updatingBooks = true;
+                            nlohmann::json request;
+
+                            request["user"]["username"] = libraryLogin->getAccount()->getUsername();
+                            request["user"]["token"] = libraryLogin->getAccount()->getToken();
+                            request["book_id"] = book->getId();
+                            request["book_title"] = book->getTitle();
+
+                            nlohmann::json response = WebRequest::returnBook(request);
+                            if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) || response.empty()) {
+                                std::printf("Error returning book: %s \n", response["error"].get<std::string>().c_str());
+                                if (response["error"].get<std::string>() == "invalid token") {
+                                    fetchedBooks = false;
+                                    libraryLogin->queueLogout();
+                                }
+                            } else {
+                                if (!response["success"].is_null() && response["success"].get<bool>()) {
+                                    std::printf("Successfully returned book \n");
+                                    libraryLogin->getAccount()->removeBook(book);
+                                    fetchedBooks = false;
+                                }
+                            }
+                            cachedSearchBooks.clear();
+                            hasCachedSearch = false;
+                        }
+                    } else if (book->hasOwner(0)) {
+                        // show checkout button as the book is not owned by anyone
+                        if (ImGui::Button("Checkout")) {
+                            updatingBooks = true;
+                            nlohmann::json claimBookRequestJson;
+                            claimBookRequestJson["user"]["username"] = libraryLogin->getAccount()->getUsername();
+                            claimBookRequestJson["user"]["token"] = libraryLogin->getAccount()->getToken();
+                            claimBookRequestJson["book_id"] = book->getId();
+                            claimBookRequestJson["book_title"] = book->getTitle();
+                            auto response = WebRequest::claimBook(claimBookRequestJson);
+                            if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) ||
+                                response.empty()) {
+                                std::printf("Error claiming book: %s \n",
+                                            response["error"].get<std::string>().c_str());
+                                if (response["error"].get<std::string>() == "invalid token") {
+                                    fetchedBooks = false;
+                                    libraryLogin->queueLogout();
+                                }
+                            } else {
+                                if (!response["success"].is_null() && response["success"].get<bool>()) {
+                                    std::printf("Successfully claimed book \n");
+                                    fetchedBooks = false;
+                                }
+                            }
+                            cachedSearchBooks.clear();
+                            hasCachedSearch = false;
+                        }
+                    } else {
+                        // show unavailable button as the book is owned by someone else
+                        ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
+                        ImGui::Button("Unavailable");
+
+                        ImGui::PopItemFlag();
+                        ImGui::PopStyleVar();
+
+                        // if user is admin, show force checkout button
+                        if (libraryLogin->getAccount()->isAdmin()) {
+                            if (ImGui::Button("Force Checkout")) {
+                                nlohmann::json request;
+                                request["authentication"]["username"] = libraryLogin->getAccount()->getUsername();
+                                request["authentication"]["token"] = libraryLogin->getAccount()->getToken();
+                                request["authentication"]["id"] = libraryLogin->getAccount()->getId();
+                                request["book_id"] = book->getId();
+                                request["book_title"] = book->getTitle();
+                                request["current_owner"] = book->getOwner();
+                                auto response = WebRequest::forceCheckout(request);
+                                if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) ||
+                                    response.empty()) {
+                                    std::printf("Error force checking out book: %s \n",
+                                                response["error"].get<std::string>().c_str());
+                                    if (response["error"].get<std::string>() == "unauthorized") {
+                                        fetchedBooks = false;
+                                        libraryLogin->queueLogout();
+                                    }
+                                } else {
+                                    if (!response["success"].is_null() && response["success"].get<bool>()) {
+                                        std::printf("Successfully force checked out book \n");
+                                        fetchedBooks = false;
+                                    }
+                                }
+                            }
+                            if (ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("Force checkout will remove the book from the current owner");
+                            }
+                        }
+
+                    }
+                    ImGui::EndChild();
+
+                    if (updatingBooks) {
+                        break;
+                    }
+
+                }
+            } else {
+                // filter search results
+                if (!hasCachedSearch) {
+                    std::printf("Searching for: %s \n", currentSearch.c_str());
+                    for (int id = 0; id < this->libraryBookCount; id++) {
+                        LibraryBook* book = libraryBooks[id];
+                        if (Search::findString(book->getTitle(), currentSearch) || Search::findString(book->getAuthor(), currentSearch)) {
+                            std::printf("Found book: %s \n", book->getTitle().c_str());
+                            cachedSearchBooks.push_back(book);
+                        }
+                    }
+                    hasCachedSearch = true;
+                }
+
+                if (cachedSearchBooks.empty() || !fetchedBooks) {
+                    ImGui::Text("No results found");
+                }
+
+                for (LibraryBook* book : cachedSearchBooks) {
+                    std::string bookTitle = book->getTitle() + " " + std::to_string(book->getId());
+
+                    ImGui::BeginChild(bookTitle.c_str(), ImVec2(480, 60), true);
+                    ImGui::Text("Title: %s", book->getTitle().c_str());
+                    ImGui::Text("Author: %s", book->getAuthor().c_str());
+                    ImGui::EndChild();
+                    ImGui::SameLine();
+                    ImGui::BeginChild((bookTitle + " Buttons").c_str(), ImVec2(150, 60), true);
+                    if (book->hasOwner(this->getLoginSystem()->getAccount()->getId())) {
+                        // show return button as you already own the book
+                        if (ImGui::Button("Return")) {
+                            updatingBooks = true;
+                            nlohmann::json request;
+
+                            request["user"]["username"] = libraryLogin->getAccount()->getUsername();
+                            request["user"]["token"] = libraryLogin->getAccount()->getToken();
+                            request["book_id"] = book->getId();
+                            request["book_title"] = book->getTitle();
+
+                            nlohmann::json response = WebRequest::returnBook(request);
+                            if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) ||
+                                response.empty()) {
+                                std::printf("Error returning book: %s \n",
+                                            response["error"].get<std::string>().c_str());
+                                if (response["error"].get<std::string>() == "invalid token") {
+                                    fetchedBooks = false;
+                                    libraryLogin->queueLogout();
+                                }
+                            } else {
+                                if (!response["success"].is_null() && response["success"].get<bool>()) {
+                                    std::printf("Successfully returned book \n");
+                                    fetchedBooks = false;
+                                }
+                            }
+                            cachedSearchBooks.clear();
+                            hasCachedSearch = false;
+                        }
+                    } else if (book->hasOwner(0)) {
+                        // show checkout button as the book is not owned by anyone
+                        if (ImGui::Button("Checkout")) {
+                            updatingBooks = true;
+                            nlohmann::json claimBookRequestJson;
+                            claimBookRequestJson["user"]["username"] = libraryLogin->getAccount()->getUsername();
+                            claimBookRequestJson["user"]["token"] = libraryLogin->getAccount()->getToken();
+                            claimBookRequestJson["book_id"] = book->getId();
+                            claimBookRequestJson["book_title"] = book->getTitle();
+                            auto response = WebRequest::claimBook(claimBookRequestJson);
+                            if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) ||
+                                response.empty()) {
+                                std::printf("Error claiming book: %s \n",
+                                            response["error"].get<std::string>().c_str());
+                                if (response["error"].get<std::string>() == "invalid token") {
+                                    fetchedBooks = false;
+                                    libraryLogin->queueLogout();
+                                }
+                            } else {
+                                if (!response["success"].is_null() && response["success"].get<bool>()) {
+                                    std::printf("Successfully claimed book \n");
+                                    fetchedBooks = false;
+                                }
+                            }
+                            cachedSearchBooks.clear();
+                            hasCachedSearch = false;
+                        }
+                    } else {
+                        // show unavailable button as the book is owned by someone else
+                        ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+
+                        ImGui::Button("Unavailable");
+
+                        ImGui::PopItemFlag();
+                        ImGui::PopStyleVar();
+
+                        // if user is admin, show force checkout button
+                        if (libraryLogin->getAccount()->isAdmin()) {
+                            if (ImGui::Button("Force Checkout")) {
+                                nlohmann::json request;
+                                request["authentication"]["username"] = libraryLogin->getAccount()->getUsername();
+                                request["authentication"]["token"] = libraryLogin->getAccount()->getToken();
+                                request["authentication"]["id"] = libraryLogin->getAccount()->getId();
+                                request["book_id"] = book->getId();
+                                request["book_title"] = book->getTitle();
+                                request["current_owner"] = book->getOwner();
+                                auto response = WebRequest::forceCheckout(request);
+                                if ((!response["error"].is_null() && !response["error"].get<std::string>().empty()) ||
+                                    response.empty()) {
+                                    std::printf("Error force checking out book: %s \n",
+                                                response["error"].get<std::string>().c_str());
+                                    if (response["error"].get<std::string>() == "unauthorized") {
+                                        fetchedBooks = false;
+                                        libraryLogin->queueLogout();
+                                    }
+                                } else {
+                                    if (!response["success"].is_null() && response["success"].get<bool>()) {
+                                        std::printf("Successfully force checked out book \n");
+                                        fetchedBooks = false;
+                                    }
+                                }
+                            }
+                            if (ImGui::IsItemHovered()) {
+                                ImGui::SetTooltip("Force checkout will remove the book from the current owner");
+                            }
+                        }
+                    }
+                    ImGui::EndChild();
+
+                    if (updatingBooks) {
+                        break;
+                    }
+                }
+            }
+            ImGui::EndChild();
+        }
+        ImGui::End();
+    }
 }
 
 void LibrarySystem::drawSettings() {
 
+}
+
+void LibrarySystem::drawAdminPanel() {
+    float topMargin = 20;
+    int window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+    if (ImGui::Begin("AdminPanel", nullptr, window_flags)) {
+        ImGui::SetWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y - topMargin * 2));
+        ImGui::SetWindowPos(ImVec2(0, topMargin));
+        if (ImGui::BeginChild("AdminPanelMenu", ImVec2(ImGui::GetIO().DisplaySize.x, 35), true)) {
+            if (ImGui::Button("Users")) {
+                fetchUsers = true;
+                currentAdminScreen = AdminScreen::ADMIN_USERS;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Logs")) {
+                fetchLogs = true;
+                currentAdminScreen = AdminScreen::ADMIN_LOGS;
+            }
+        }
+        ImGui::EndChild();
+
+        auto childSize = ImVec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y - topMargin * 5);
+        if (currentAdminScreen == AdminScreen::ADMIN_LOGS) {
+            if (!logResponse.empty()) {
+                float expectedSize = ((float)logResponse.size() * 70) + 35; // 70 = height of each log 35 = height of filter
+                if (expectedSize > childSize.y) {
+                    childSize.y = expectedSize;
+                }
+            }
+        } else if (currentAdminScreen == AdminScreen::ADMIN_USERS) {
+            if (!userResponse.empty()) {
+                float expectedSize = ((float)userResponse.size() * 70) + 35; // 70 = height of each log 35 = height of filter
+                if (expectedSize > childSize.y) {
+                    childSize.y = expectedSize;
+                }
+            }
+        }
+
+        if (ImGui::BeginChild("AdminPanelDisplay", childSize, true)) {
+            switch (currentAdminScreen) {
+                case AdminScreen::ADMIN_USERS:
+                    tryFetchUsers();
+                    drawAdminUsers();
+                    break;
+                case AdminScreen::ADMIN_LOGS:
+                    tryFetchLogs();
+                    drawAdminLogs();
+                    break;
+            }
+        }
+        ImGui::EndChild();
+
+        ImGui::End();
+    }
+}
+
+void LibrarySystem::drawAdminLogs() {
+    if (ImGui::BeginChild("AdminLogsFilter", ImVec2(ImGui::GetIO().DisplaySize.x, 35), true)) {
+        if (ImGui::BeginChild("AdminLogsFilter__Amount", ImVec2(150, 25))) {
+            ImGui::InputInt("Amount", &logAmount);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        if (ImGui::BeginChild("AdminLogsFilter__User", ImVec2(150, 25))) {
+            ImGui::InputInt("User", &logUserTarget);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        if (ImGui::BeginChild("AdminLogsFilter__Page", ImVec2(150, 25))) {
+            ImGui::InputInt("Page", &logPage);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        if (ImGui::BeginChild("AdminLogsFilter__Fetch", ImVec2(150, 25))) {
+            if (ImGui::Button("Fetch")) {
+                logResponse.clear();
+                fetchLogs = true;
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::EndChild();
+
+    if (logResponse.empty()) {
+        ImGui::Text("No logs found, Check filter or refresh in the case of an error.");
+        ImGui::Text("(you can refresh by re-selecting the current tab or clicking the fetch button)");
+    } else {
+        for (auto& log : logResponse) {
+            if (log["__time_str"].is_null()) {
+                auto creation = date::year_month_day{date::floor<date::days>(std::chrono::system_clock::from_time_t(log["time"].get<int>()))};
+                log["__time_str"] = std::string(date::format("%d/%m/%Y", creation));
+            }
+            if (ImGui::BeginChild(log["id"].get<int>(), ImVec2(ImGui::GetIO().DisplaySize.x, 65), true)) {
+                ImGui::Text("User ID: %d | %s", log["user_id"].get<int>(), log["__time_str"].get<std::string>().c_str());
+                ImGui::Text("Action: %s", log["action"].get<std::string>().c_str());
+                ImGui::Text("%s", log["response"].get<std::string>().c_str());
+            }
+            ImGui::EndChild();
+        }
+    }
+}
+
+void LibrarySystem::drawAdminUsers() {
+
+    if (ImGui::BeginChild("AdminUsersFilter", ImVec2(ImGui::GetIO().DisplaySize.x, 35), true)) {
+        if (ImGui::BeginChild("AdminUsersFilter__Amount", ImVec2(150, 25))) {
+            ImGui::InputInt("Amount", &userAmount);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        if (ImGui::BeginChild("AdminUsersFilter__Page", ImVec2(150, 25))) {
+            ImGui::InputInt("Page", &userPage);
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        if (ImGui::BeginChild("AdminUsersFilter__Fetch", ImVec2(150, 25))) {
+            if (ImGui::Button("Fetch")) {
+                userResponse.clear();
+                fetchUsers = true;
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::EndChild();
+
+    if (!fetchUsers) { // users have been fetched
+
+        if (userResponse.empty()) {
+            ImGui::Text("No users found, Check filter or refresh in the case of an error.");
+            ImGui::Text("(you can refresh by re-selecting the current tab or clicking the fetch button)");
+        }
+
+        for (auto &user : userResponse){
+            if (user["__time_str"].is_null()) {
+                auto creation = date::year_month_day{date::floor<date::days>(std::chrono::system_clock::from_time_t(user["created_at"].get<int>()))};
+                user["__time_str"] = std::string(date::format("%d/%m/%Y", creation));
+            }
+            if (ImGui::BeginChild(user["id"].get<int>(), ImVec2(ImGui::GetIO().DisplaySize.x, 65), true)) {
+                ImGui::Text(" %d | %s", user["id"].get<int>(), user["username"].get<std::string>().c_str());
+                ImGui::Text("Created: %s", user["__time_str"].get<std::string>().c_str());
+                ImGui::Text("Admin: %s", (user["isAdmin"].get<bool>() ? "True" : "False"));
+            }
+            ImGui::EndChild();
+        }
+
+    }
 }
 
 LibraryLogin* LibrarySystem::getLoginSystem() {
@@ -249,6 +694,10 @@ void LibrarySystem::fetchBooks() {
 
     if (!books["error"].is_null() && !books["error"].get<std::string>().empty()) {
         std::printf("Error: %s \n", books["error"].get<std::string>().c_str());
+        if (books["error"].get<std::string>() == "invalid token") {
+            fetchedBooks = false;
+            libraryLogin->queueLogout();
+        }
         return;
     }
 
@@ -271,4 +720,100 @@ void LibrarySystem::fetchBooks() {
 
     std::printf("Fetched %d book(s)\n", libraryBookCount);
 
+}
+
+void LibrarySystem::tryFetchLogs() {
+    if (fetchLogs) {
+        nlohmann::json request;
+        request["authentication"]["username"] = libraryLogin->getAccount()->getUsername();
+        request["authentication"]["token"] = libraryLogin->getAccount()->getToken();
+        request["authentication"]["id"] = libraryLogin->getAccount()->getId();
+        request["amount"] = logAmount;
+        request["target_user"] = logUserTarget;
+        request["page"] = logPage;
+        nlohmann::json logs = WebRequest::fetchLogs(request);
+
+        if (logs.empty()) {
+            std::printf("Error fetching logs \n");
+            fetchLogs = false;
+            return;
+        }
+
+        if (!logs["error"].is_null() && !logs["error"].get<std::string>().empty()) {
+            std::printf("Error: %s \n", logs["error"].get<std::string>().c_str());
+            if (logs["error"].get<std::string>() == "invalid token") {
+                fetchedBooks = false;
+                libraryLogin->queueLogout();
+            }
+            fetchLogs = false;
+            return;
+        }
+
+        if (logs["success"].is_null() || !logs["success"].get<bool>()) {
+            std::printf("Unknown Error \n");
+            fetchLogs = false;
+            return;
+        }
+
+        if (logs["actions"].is_null() || logs["actions"].empty()) {
+            std::printf("No logs found \n");
+            fetchLogs = false;
+            return;
+        } else {
+            logResponse = logs["actions"];
+        }
+
+        std::printf("Fetched (%zu) logs \n", logResponse.size());
+
+        fetchLogs = false;
+    }
+}
+
+void LibrarySystem::tryFetchUsers() {
+    if (fetchUsers) {
+        nlohmann::json request;
+        request["authentication"]["username"] = libraryLogin->getAccount()->getUsername();
+        request["authentication"]["token"] = libraryLogin->getAccount()->getToken();
+        request["authentication"]["id"] = libraryLogin->getAccount()->getId();
+        request["amount"] = userAmount;
+        request["page"] = userPage;
+
+        nlohmann::json users = WebRequest::fetchUsers(request);
+
+
+        if (users.empty()) {
+            std::printf("Error fetching users \n");
+            fetchUsers = false;
+            return;
+        }
+
+        if (!users["error"].is_null() && !users["error"].get<std::string>().empty()) {
+            std::printf("Error: %s \n", users["error"].get<std::string>().c_str());
+            if (users["error"].get<std::string>() == "invalid token") {
+                fetchedBooks = false;
+                libraryLogin->queueLogout();
+            }
+            fetchUsers = false;
+            return;
+        }
+
+        if (users["success"].is_null() || !users["success"].get<bool>()) {
+            std::printf("Unknown Error \n");
+            fetchUsers = false;
+            return;
+        }
+
+        if (users["users"].is_null() || users["users"].empty()) {
+            std::printf("No users found \n");
+            fetchUsers = false;
+            return;
+        } else {
+            userResponse = users["users"];
+        }
+
+        std::printf("Fetched (%zu) users \n", userResponse.size());
+
+        fetchUsers = false;
+
+    }
 }
