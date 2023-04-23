@@ -1,6 +1,5 @@
-// Dear ImGui: standalone example application for DirectX 9
-// If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
-// Read online: https://github.com/ocornut/imgui/tree/master/docs
+// Dear ImGui: standalone application for DirectX 9
+// https://github.com/ocornut/imgui/tree/master/docs
 
 #include "external/imgui.h"
 #include "external/imgui_impl_dx9.h"
@@ -12,21 +11,21 @@
 #include <tchar.h>
 #include <iostream>
 
-// Data
+// Programs Data
 static LPDIRECT3DDEVICE9 g_pd3dDevice = nullptr;
 static LPDIRECT3D9 g_pD3D = nullptr;
 static D3DPRESENT_PARAMETERS g_d3dpp = {};
 static LibrarySystem *librarySystem;
 
-// Forward declarations of helper functions
+// Forward declarations of DirectX / Windows API helper functions
 bool CreateDeviceD3D(HWND hWnd);
-
 void CleanupDeviceD3D();
-
 void ResetDevice();
-
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+/*
+ * Load a texture from disk into a new DirectX texture
+ */
 bool LoadTextureFromFile(const char *filename, PDIRECT3DTEXTURE9 *out_texture, int *out_width, int *out_height) {
     // Load texture from disk
     PDIRECT3DTEXTURE9 texture;
@@ -96,31 +95,13 @@ int main(int, char **) {
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX9_Init(g_pd3dDevice);
 
-    // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-    // - If the file cannot be loaded, the function will return nullptr. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
-    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
-    // - Read 'docs/FONTS.md' for more instructions and details.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    //io.Fonts->AddFontDefault();
+    // Load Font
     io.Fonts->AddFontFromFileTTF("..\\assets\\SFMonoRegular.otf", 13.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
 
-    //std::cout << "Loading font" << std::endl;
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\Comic Sans MS.ttf", 18.0f, nullptrptr, io.Fonts->GetGlyphRangesJapanese());
-    //IM_ASSERT(font != nullptrptr);
-    //std::cout << "Loaded font" << std::endl;
+    // window state
+    ImVec4 clear_color = ImVec4(0.106f, 0.106f, 0.106f, 1.00f); // background colour for the window
 
-    // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
-    ImVec4 clear_color = ImVec4(0.106f, 0.106f, 0.106f, 1.00f);
-
-    // Main loop
+    // load default profile picture
     int my_image_width = 0;
     int my_image_height = 0;
     PDIRECT3DTEXTURE9 my_texture = NULL;
@@ -136,6 +117,7 @@ int main(int, char **) {
     bool toggledConsole = false;
     librarySystem = new LibrarySystem(hwnd, Image(my_texture, my_image_width / 5, my_image_height / 5));
 
+    // add rounding to windows created by imgui
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5);
 
     while (true) {
@@ -150,7 +132,7 @@ int main(int, char **) {
         }
 
         if (shouldClose) {
-            // pre-close operations
+            // if close is queued, skip rendering the next frame and exit the loop
             break;
         }
 
@@ -200,6 +182,7 @@ int main(int, char **) {
 
     delete librarySystem;
 
+    // shutdown imgui and clean up resources
     ImGui_ImplDX9_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -212,7 +195,6 @@ int main(int, char **) {
 }
 
 // Helper functions
-
 bool CreateDeviceD3D(HWND hWnd) {
     if ((g_pD3D = Direct3DCreate9(D3D_SDK_VERSION)) == nullptr)
         return false;
@@ -256,10 +238,6 @@ void ResetDevice() {
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // Win32 message handler
-// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
@@ -281,8 +259,4 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
-}
-
-static LibrarySystem* getLibrarySystem() {
-    return librarySystem;
 }
